@@ -34,7 +34,7 @@ struct GameState {
   int freeTilesCount;
   TileValue board[3][3];
   GameEndStatus endStatus;
-  bool computerTurn;
+  bool running;
 };
 
 struct SpriteSheet {
@@ -42,7 +42,7 @@ struct SpriteSheet {
   SDL_Rect clips[7];
 };
 
-bool G_running;
+
 
 SDL_Texture *
 sdlLoadTexture(char* resourcePath, char* filename, SDL_Renderer *ren) {
@@ -459,6 +459,7 @@ gameUpdatePlayer(GameState* gameState, PlayerInput *input) {
       if (input->keyPressed[row][column]) {
         playerMoveRow = row;
         playerMoveColumn = column;
+        input->keyPressed[row][column] = false;
         break;
       }
     }
@@ -479,14 +480,14 @@ gameUpdatePlayer(GameState* gameState, PlayerInput *input) {
 }
 
 static void
-sdlHandleEvent(SDL_Event *event, PlayerInput *input) {
+sdlHandleEvent(GameState* gameState, SDL_Event *event, PlayerInput *input) {
 
-  *input = {};
+  printf("event->type: %x\n", event->type);
 
   switch (event->type) {
 
     case SDL_QUIT: {
-      G_running = false;
+      gameState->running = false;
     } break;
 
     case SDL_KEYDOWN: {
@@ -522,7 +523,7 @@ sdlHandleEvent(SDL_Event *event, PlayerInput *input) {
             input->keyPressed[2][2] = true;
           } break;
           case SDLK_ESCAPE: {
-            G_running = false;
+            gameState->running = false;
           } break;
         }
       }        
@@ -531,7 +532,7 @@ sdlHandleEvent(SDL_Event *event, PlayerInput *input) {
 }
 
 static int
-sdlGameEnd(GameState* gameState) {
+sdlGameEnd(GameState* gameState, SDL_Window *win) {
   char message[1000];
   switch (gameState->endStatus) {
     case DRAW_END: {
@@ -557,7 +558,7 @@ sdlGameEnd(GameState* gameState) {
   };
   SDL_MessageBoxData messageboxdata = {
     SDL_MESSAGEBOX_INFORMATION,
-    0,
+    win,
     "GAME OVER",
     message,
     SDL_arraysize(buttons), 
@@ -572,9 +573,10 @@ sdlGameEnd(GameState* gameState) {
   if (buttonid == 1) {
       *gameState = {};
       gameState->freeTilesCount = 9;  
-      gameState->computerTurn = true;
+      gameState->running = true;
+      gameState->endStatus = NO_END;
   } else {
-      G_running = false;
+      gameState->running = false;
   }
   return 0;
 }
@@ -655,26 +657,28 @@ main(int, char**) {
 #else
   srandom(time(0));
 #endif
-  G_running = true;
   GameState gameState = {};
   gameState.freeTilesCount = 9;  
-  gameState.computerTurn = true;
+  gameState.running = true;
+  gameState.endStatus = NO_END;
+    
+  PlayerInput input = {};
 
-  while (G_running) {
-    sdlRenderGame(&gameState, ren, &spriteSheet);
+  while (gameState.running) {
     SDL_Event event;
-    while (G_running && SDL_PollEvent(&event)) {
-      PlayerInput input = {};
-      sdlHandleEvent(&event, &input);
+    while (SDL_PollEvent(&event)) {
+      sdlHandleEvent(&gameState, &event, &input);
+    }
+    if (gameState.running) {
       if (gameUpdatePlayer(&gameState, &input) && 
           gameState.endStatus == NO_END) {
         gameUpdateComputer(&gameState);
-      } else {
-        sdlRenderGame(&gameState, ren, &spriteSheet);
       }
+    
+      sdlRenderGame(&gameState, ren, &spriteSheet);
+      
       if (gameState.endStatus != NO_END) {
-        sdlRenderGame(&gameState, ren, &spriteSheet);
-        if (sdlGameEnd(&gameState)) {
+        if (sdlGameEnd(&gameState, win)) {
           return 1;
         }
       }
