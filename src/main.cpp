@@ -1,7 +1,16 @@
+#ifdef BUILD_OSX
 #include <SDL2/SDL.h>
+#else
+#include <SDL.h>
+#endif
 #include <assert.h>
 #include <time.h>
+#include <stdlib.h>
 #include "res_path.h"
+
+#ifdef BUILD_WIN32
+#include <windows.h>
+#endif
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
@@ -25,6 +34,7 @@ struct GameState {
   int freeTilesCount;
   TileValue board[3][3];
   GameEndStatus endStatus;
+  bool computerTurn;
 };
 
 struct SpriteSheet {
@@ -37,8 +47,8 @@ bool G_running;
 SDL_Texture *
 sdlLoadTexture(char* resourcePath, char* filename, SDL_Renderer *ren) {
 
-  char* imagePath;
-  if ((imagePath = (char*) malloc(strlen(resourcePath) + strlen(filename) + 1))) {
+  char* imagePath  = (char*) malloc(strlen(resourcePath) + strlen(filename) + 1);
+  if (imagePath) {
     strcpy(imagePath, resourcePath);
     strcat(imagePath, filename);
   } else {
@@ -62,7 +72,7 @@ sdlLoadTexture(char* resourcePath, char* filename, SDL_Renderer *ren) {
 static void
 sdlRenderGame(GameState* gameState, SDL_Renderer *ren, SpriteSheet* spriteSheet) {
 
-  SDL_SetRenderDrawColor(ren, 0xFF, 0xFF, 0xFF, 0xFF );
+  SDL_SetRenderDrawColor(ren, 0xFF, 0xFF, 0xFF, 0xFF);
   SDL_RenderClear(ren);
 
   for (int row = 0; row < 3; ++row) {
@@ -72,18 +82,19 @@ sdlRenderGame(GameState* gameState, SDL_Renderer *ren, SpriteSheet* spriteSheet)
       SDL_Rect dstrect = {screenX, screenY, TILE_PIXEL_SIZE, TILE_PIXEL_SIZE};
       SDL_Rect* srcrect;
       switch (gameState->board[row][column]) {
-        case EMPTY_TILE: {
-          srcrect = &spriteSheet->clips[6];
-
-        } break;
         case COMPUTER_TILE: {
           srcrect = &spriteSheet->clips[5];
 
         } break;
+
         case PLAYER_TILE: {
           srcrect = &spriteSheet->clips[2];
 
         } break;
+
+        default: {
+          srcrect = &spriteSheet->clips[6];
+        }
       }
       SDL_RenderCopy(ren, spriteSheet->texture, srcrect, &dstrect);
     }
@@ -95,7 +106,7 @@ static void
 gameUpdateStatus(GameState* gameState) {
 
   for (int row = 0; row < 3; ++row) {
-    if (gameState->board[row][0] !=  EMPTY_TILE &&
+    if (gameState->board[row][0] != EMPTY_TILE &&
         gameState->board[row][0] == gameState->board[row][1] &&
         gameState->board[row][0] == gameState->board[row][2]) {
       gameState->endStatus = (gameState->board[row][0] == COMPUTER_TILE)
@@ -104,7 +115,7 @@ gameUpdateStatus(GameState* gameState) {
     } 
   }
   for (int column = 0; column < 3; ++column) {
-    if (gameState->board[0][column] !=  EMPTY_TILE &&
+    if (gameState->board[0][column] != EMPTY_TILE &&
         gameState->board[0][column] == gameState->board[1][column] &&
         gameState->board[0][column] == gameState->board[2][column]) {
       gameState->endStatus = (gameState->board[0][column] == COMPUTER_TILE)
@@ -112,17 +123,17 @@ gameUpdateStatus(GameState* gameState) {
       return;
     } 
   }
-  if (gameState->board[0][0] !=  EMPTY_TILE &&
+  if (gameState->board[0][0] != EMPTY_TILE &&
       gameState->board[0][0] == gameState->board[1][1] &&
       gameState->board[0][0] == gameState->board[2][2]) {
     gameState->endStatus = (gameState->board[0][0] == COMPUTER_TILE)
                          ? COMPUTER_WINS_END : PLAYER_WINS_END;
     return;
   }
-  if (gameState->board[0][2] !=  EMPTY_TILE &&
+  if (gameState->board[0][2] != EMPTY_TILE &&
       gameState->board[0][2] == gameState->board[1][1] &&
       gameState->board[0][2] == gameState->board[2][0]) {
-    gameState->endStatus = (gameState->board[0][0] == COMPUTER_TILE)
+    gameState->endStatus = (gameState->board[0][2] == COMPUTER_TILE)
                          ? COMPUTER_WINS_END : PLAYER_WINS_END;
     return;
   }
@@ -138,91 +149,85 @@ gameUpdateStatus(GameState* gameState) {
 }
 
 static bool
-gameUpdateComplete3rdMove(GameState* gameState, TileValue tileValue) {
-  for (int row = 0; row < 3; ++row) {
-    if (gameState->board[row][0] ==  tileValue &&
-        gameState->board[row][0] == gameState->board[row][1] &&
-        gameState->board[row][2] == EMPTY_TILE) {
-      gameState->board[row][2] = COMPUTER_TILE;  
-      --gameState->freeTilesCount;  
-      return true;
-    }
-    if (gameState->board[row][1] ==  tileValue &&
-        gameState->board[row][1] == gameState->board[row][2] &&
-        gameState->board[row][0] == EMPTY_TILE) {
-      gameState->board[row][0] = COMPUTER_TILE;  
-      --gameState->freeTilesCount;  
-      return true;
-    }
-    if (gameState->board[row][0] ==  tileValue &&
-        gameState->board[row][0] == gameState->board[row][2] &&
-        gameState->board[row][1] == EMPTY_TILE) {
-      gameState->board[row][1] = COMPUTER_TILE;  
-      --gameState->freeTilesCount;  
-      return true;
-    }
-  }
-  for (int column = 0; column < 3; ++column) {
-    if (gameState->board[0][column] ==  tileValue &&
-        gameState->board[0][column] == gameState->board[1][column] &&
-        gameState->board[2][column] == EMPTY_TILE) {
-      gameState->board[2][column] = COMPUTER_TILE;  
-      --gameState->freeTilesCount;  
-      return true;
-    }
-    if (gameState->board[1][column] ==  tileValue &&
-        gameState->board[1][column] == gameState->board[2][column] &&
-        gameState->board[0][column] == EMPTY_TILE) {
-      gameState->board[0][column] = COMPUTER_TILE;  
-      --gameState->freeTilesCount;  
-      return true;
-    }
-    if (gameState->board[0][column] ==  tileValue &&
-        gameState->board[0][column] == gameState->board[2][column] &&
-        gameState->board[1][column] == EMPTY_TILE) {
-      gameState->board[1][column] = COMPUTER_TILE;  
-      --gameState->freeTilesCount;  
-      return true;
-    }
-  }
-  if (gameState->board[0][0] ==  tileValue &&
-      gameState->board[0][0] == gameState->board[1][1] &&
-      gameState->board[2][2] == EMPTY_TILE) {
-    gameState->board[2][2] = COMPUTER_TILE;  
+gameUpdateLineMoveRow(GameState* gameState, TileValue tileValue, 
+                                int row, int columnA, int columnB) {
+  int columnC = 3 - columnA - columnB;
+  if (gameState->board[row][columnA] == tileValue &&
+      gameState->board[row][columnA] == gameState->board[row][columnB] &&
+      gameState->board[row][columnC] == EMPTY_TILE) {
+    gameState->board[row][columnC] = COMPUTER_TILE;  
     --gameState->freeTilesCount;  
     return true;
-  }
-  if (gameState->board[0][0] ==  tileValue &&
-      gameState->board[0][0] == gameState->board[2][2] &&
-      gameState->board[1][1] == EMPTY_TILE) {
-    gameState->board[1][1] = COMPUTER_TILE;  
+  } 
+  return false;
+}
+
+static bool
+gameUpdateLineMoveColumn(GameState* gameState, TileValue tileValue, 
+                                int column, int rowA, int rowB) {
+  int rowC = 3 - rowA - rowB;
+  if (gameState->board[rowA][column] == tileValue &&
+      gameState->board[rowA][column] == gameState->board[rowB][column] &&
+      gameState->board[rowC][column] == EMPTY_TILE) {
+    gameState->board[rowC][column] = COMPUTER_TILE;  
     --gameState->freeTilesCount;  
     return true;
+  } 
+  return false;
+}
+
+static bool
+gameUpdateLineMoveDiagonal(GameState* gameState, TileValue tileValue, 
+                                int cellA, int cellB) {
+  int cellC = 3 - cellA - cellB;
+  if (gameState->board[cellA][cellA] == tileValue &&
+      gameState->board[cellA][cellA] == gameState->board[cellB][cellB] &&
+      gameState->board[cellC][cellC] == EMPTY_TILE) {
+    gameState->board[cellC][cellC] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+  return false;
+}
+
+static bool
+gameUpdateLineMoveInvDiagonal(GameState* gameState, TileValue tileValue, 
+                                     int columnA, int columnB) {
+  int columnC = 3 - columnA - columnB;
+  int rowA = 2 - columnA;
+  int rowB = 2 - columnB;
+  int rowC = 2 - columnC;
+  if (gameState->board[rowA][columnA] == tileValue &&
+      gameState->board[rowA][columnA] == gameState->board[rowB][columnB] &&
+      gameState->board[rowC][columnC] == EMPTY_TILE) {
+    gameState->board[rowC][columnC] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+  return false;
+}
+
+static bool
+gameUpdateComputerCornerMove(GameState* gameState) {
+  if (gameState->freeTilesCount < 8) {
+    return false;
   }
-  if (gameState->board[1][1] ==  tileValue &&
-      gameState->board[1][1] == gameState->board[2][2] &&
-      gameState->board[0][0] == EMPTY_TILE) {
+  if (gameState->board[0][0] == EMPTY_TILE) {
     gameState->board[0][0] = COMPUTER_TILE;  
     --gameState->freeTilesCount;  
     return true;
   }
-  if (gameState->board[2][0] ==  tileValue &&
-      gameState->board[2][0] == gameState->board[1][1] &&
-      gameState->board[0][2] == EMPTY_TILE) {
+  if (gameState->board[0][2] == EMPTY_TILE) {
     gameState->board[0][2] = COMPUTER_TILE;  
     --gameState->freeTilesCount;  
     return true;
   }
-  if (gameState->board[2][0] ==  tileValue &&
-      gameState->board[2][0] == gameState->board[0][2] &&
-      gameState->board[1][1] == EMPTY_TILE) {
-    gameState->board[1][1] = COMPUTER_TILE;  
+  if (gameState->board[2][2] == EMPTY_TILE) {
+    gameState->board[2][2] = COMPUTER_TILE;  
     --gameState->freeTilesCount;  
     return true;
   }
-  if (gameState->board[1][1] ==  tileValue &&
-      gameState->board[1][1] == gameState->board[0][2] &&
-      gameState->board[2][0] == EMPTY_TILE) {
+  if (gameState->board[2][0] == EMPTY_TILE) {
     gameState->board[2][0] = COMPUTER_TILE;  
     --gameState->freeTilesCount;  
     return true;
@@ -230,9 +235,190 @@ gameUpdateComplete3rdMove(GameState* gameState, TileValue tileValue) {
   return false;
 }
 
+static bool
+gameUpdatePlayerCornerMove(GameState* gameState) {
+  if (gameState->freeTilesCount < 8) {
+    return false;
+  }
+  if (gameState->board[0][0] == PLAYER_TILE) {
+    gameState->board[1][1] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  }
+  if (gameState->board[0][2] == PLAYER_TILE) {
+    gameState->board[1][1] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  }
+  if (gameState->board[2][2] == PLAYER_TILE) {
+    gameState->board[1][1] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  }
+  if (gameState->board[2][0] == PLAYER_TILE) {
+    gameState->board[1][1] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  }
+  return false;
+}
+
+static bool
+gameUpdateLineMove(GameState* gameState, TileValue tileValue) {
+  for (int row = 0; row < 3; ++row) {
+    if (gameUpdateLineMoveRow(gameState, tileValue, row, 0, 1) ||
+        gameUpdateLineMoveRow(gameState, tileValue, row, 1, 2) ||
+        gameUpdateLineMoveRow(gameState, tileValue, row, 0, 2)) {
+      return true;
+    }
+  }
+  for (int column = 0; column < 3; ++column) {
+    if (gameUpdateLineMoveColumn(gameState, tileValue, column, 0, 1) ||
+        gameUpdateLineMoveColumn(gameState, tileValue, column, 1, 2) ||
+        gameUpdateLineMoveColumn(gameState, tileValue, column, 0, 2)) {
+      return true;
+    }
+  }
+  if (gameUpdateLineMoveDiagonal(gameState, tileValue, 0, 1) ||
+      gameUpdateLineMoveDiagonal(gameState, tileValue, 1, 2) ||
+      gameUpdateLineMoveDiagonal(gameState, tileValue, 0, 2)) {
+    return true;
+  }
+  if (gameUpdateLineMoveInvDiagonal(gameState, tileValue, 0, 1) ||
+      gameUpdateLineMoveInvDiagonal(gameState, tileValue, 1, 2) ||
+      gameUpdateLineMoveInvDiagonal(gameState, tileValue, 0, 2)) {
+    return true;
+  }
+  return false;
+}
+
+static bool
+gameUpdateTrapMoveNoCenter(GameState* gameState, TileValue tileValue, 
+                                  int rowA, int columnA) {
+
+  if (gameState->board[rowA][columnA] != tileValue) {
+    return false;
+  }
+  int rowB = 1;
+  int rowC = 2;
+  switch (rowA) {
+    case 1: {
+      rowB = 0;
+      rowC = 2;
+    } break;
+    case 2: {
+      rowB = 0;
+      rowC = 1;
+    } break;
+  }
+  int columnB = 1;
+  int columnC = 2;
+  switch (columnA) {
+    case 1: {
+      columnB = 0;
+      columnC = 2;
+    } break;
+    case 2: {
+      columnB = 0;
+      columnC = 1;
+    } break;
+  }
+
+  if (((gameState->board[rowA][columnB] == tileValue && gameState->board[rowA][columnC] == EMPTY_TILE) || 
+       (gameState->board[rowA][columnC] == tileValue && gameState->board[rowA][columnB] == EMPTY_TILE)) &&
+      gameState->board[rowB][columnA] == EMPTY_TILE &&
+      gameState->board[rowC][columnA] == EMPTY_TILE) {
+    gameState->board[rowB][columnA] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+  if (((gameState->board[rowB][columnA] == tileValue && gameState->board[rowC][columnA] == EMPTY_TILE) || 
+       (gameState->board[rowC][columnA] == tileValue && gameState->board[rowB][columnA] == EMPTY_TILE)) &&
+      gameState->board[rowA][columnB] == EMPTY_TILE &&
+      gameState->board[rowA][columnC] == EMPTY_TILE) {
+    gameState->board[rowA][columnB] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+  if (((gameState->board[rowA][columnB] == tileValue && gameState->board[rowA][columnC] == EMPTY_TILE) || 
+       (gameState->board[rowA][columnC] == tileValue && gameState->board[rowA][columnB] == EMPTY_TILE)) &&
+      gameState->board[rowB][columnB] == EMPTY_TILE &&
+      gameState->board[rowC][columnC] == EMPTY_TILE) {
+    gameState->board[rowB][columnB] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+  if (((gameState->board[rowB][columnB] == tileValue && gameState->board[2][columnC] == EMPTY_TILE) || 
+       (gameState->board[rowC][columnC] == tileValue && gameState->board[rowB][columnB] == EMPTY_TILE)) &&
+      gameState->board[rowA][columnB] == EMPTY_TILE &&
+      gameState->board[rowA][columnC] == EMPTY_TILE) {
+    gameState->board[rowA][columnB] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+  if (((gameState->board[rowB][columnA] == tileValue && gameState->board[rowC][columnA] == EMPTY_TILE) || 
+       (gameState->board[rowC][columnA] == tileValue && gameState->board[rowB][columnA] == EMPTY_TILE)) &&
+      gameState->board[rowB][columnB] == EMPTY_TILE &&
+      gameState->board[rowC][columnC] == EMPTY_TILE) {
+    gameState->board[rowB][columnB] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+  if (((gameState->board[rowB][columnB] == tileValue && gameState->board[rowC][columnC] == EMPTY_TILE) || 
+       (gameState->board[rowC][columnC] == tileValue && gameState->board[rowB][columnB] == EMPTY_TILE)) &&
+      gameState->board[rowB][columnA] == EMPTY_TILE &&
+      gameState->board[rowC][columnA] == EMPTY_TILE) {
+    gameState->board[rowB][columnA] = COMPUTER_TILE;  
+    --gameState->freeTilesCount;  
+    return true;
+  } 
+
+  return false;
+}
+
+static bool
+gameUpdateTrapMoveCenter(GameState* gameState, TileValue tileValue) {
+  return false;
+}
+
+static bool
+gameUpdateTrapMove(GameState* gameState, TileValue tileValue) {
+  for (int row = 0; row < 3; ++row) {
+    for (int column = 0; column < 3; ++column) {
+      if ((row != 2) && (column != 2)) {
+        if (gameUpdateTrapMoveNoCenter(gameState, COMPUTER_TILE, row, column)) {
+          return true;
+        }
+      } else {
+         if (gameUpdateTrapMoveCenter(gameState, COMPUTER_TILE)) {
+          return true;
+        }
+      }
+    }
+  }
+  for (int row = 0; row < 3; ++row) {
+    for (int column = 0; column < 3; ++column) {
+      if ((row != 2) && (column != 2)) {
+        if (gameUpdateTrapMoveNoCenter(gameState, PLAYER_TILE, row, column)) {
+          return true;
+        }
+      } else {
+         if (gameUpdateTrapMoveCenter(gameState, PLAYER_TILE)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 static void
 gameUpdateRandomMove(GameState* gameState) {
+#ifdef BUILD_WIN32
+  int randomTileIndex = rand() % gameState->freeTilesCount;
+#else  
   int randomTileIndex = random() % gameState->freeTilesCount;
+#endif  
   for (int row = 0; row < 3; ++row) {
     for (int column = 0; column < 3; ++column) {
       if (gameState->board[row][column] != EMPTY_TILE) {
@@ -253,11 +439,14 @@ gameUpdateComputer(GameState* gameState) {
   if (gameState->freeTilesCount == 0) {
     return;
   }
-  if (!gameUpdateComplete3rdMove(gameState, COMPUTER_TILE) &&
-      !gameUpdateComplete3rdMove(gameState, PLAYER_TILE)) {
+  if (!gameUpdateLineMove(gameState, COMPUTER_TILE) &&
+      !gameUpdateLineMove(gameState, PLAYER_TILE) &&
+      !gameUpdateTrapMove(gameState, COMPUTER_TILE) &&
+      !gameUpdateTrapMove(gameState, PLAYER_TILE) &&
+      !gameUpdatePlayerCornerMove(gameState) &&
+      !gameUpdateComputerCornerMove(gameState)) {
     gameUpdateRandomMove(gameState);
   }
-
   gameUpdateStatus(gameState);
 }
 
@@ -363,25 +552,27 @@ sdlGameEnd(GameState* gameState) {
   }
 
   SDL_MessageBoxButtonData buttons[] = {
-    { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "yes" },
-    { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 1, "no" },
+    { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "no" },
+    { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "yes" }
   };
   SDL_MessageBoxData messageboxdata = {
     SDL_MESSAGEBOX_INFORMATION,
-    NULL,
+    0,
     "GAME OVER",
     message,
     SDL_arraysize(buttons), 
     buttons 
   };
-  int buttonid;
+  int buttonid = -1;
   if (SDL_ShowMessageBox(&messageboxdata, &buttonid) < 0) {
     fprintf(stderr, "SDL_ShowMessageBox Error: %s\n", SDL_GetError());
     return 1;
   }
-  if (buttonid == 0) {
+  printf("buttonid = %d\n", buttonid);
+  if (buttonid == 1) {
       *gameState = {};
       gameState->freeTilesCount = 9;  
+      gameState->computerTurn = true;
   } else {
       G_running = false;
   }
@@ -394,6 +585,8 @@ main(int, char**) {
     fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
     return 1;
   }
+
+  SDL_LogSetAllPriority(SDL_LOG_PRIORITY_WARN);
 
   atexit(SDL_Quit);
 
@@ -457,19 +650,24 @@ main(int, char**) {
   spriteSheet.clips[6].h =   42;
   spriteSheet.clips[6].w =   42;
 
+#ifdef BUILD_WIN32
+  srand((unsigned) time(0));
+#else
   srandom(time(0));
-
+#endif
   G_running = true;
   GameState gameState = {};
   gameState.freeTilesCount = 9;  
-  
+  gameState.computerTurn = true;
+
   while (G_running) {
     sdlRenderGame(&gameState, ren, &spriteSheet);
     SDL_Event event;
     while (G_running && SDL_PollEvent(&event)) {
       PlayerInput input = {};
       sdlHandleEvent(&event, &input);
-      if (gameUpdatePlayer(&gameState, &input)) {
+      if (gameUpdatePlayer(&gameState, &input) && 
+          gameState.endStatus == NO_END) {
         gameUpdateComputer(&gameState);
       } else {
         sdlRenderGame(&gameState, ren, &spriteSheet);

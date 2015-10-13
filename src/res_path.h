@@ -3,7 +3,11 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifdef BUILD_OSX
 #include <SDL2/SDL.h>
+#else
+#include <SDL.h>
+#endif
 
 /*
  * Get the resource path for resources located in res/subDir
@@ -44,7 +48,7 @@ sdlGetResourcePath(char* subDir = 0) {
 			fprintf(stderr, "Error getting build folder path\n");
 			return 0;
 		}
-		int baseResSize = strlen(basePath) - strlen("build") + strlen("res") + 1;
+		size_t baseResSize = strlen(basePath) - strlen("build") + strlen("res") + 1;
 		baseRes = (char*) malloc(baseResSize);
 		if (!baseRes) {
       		fprintf(stderr,"malloc failed!\n");
@@ -61,7 +65,7 @@ sdlGetResourcePath(char* subDir = 0) {
 	//append it to the base path. This would be something like Lessons/res/Lesson0
 	char* result;
 	if (subDir) {
-		int resultSize = strlen(baseRes) + strlen(subDir) + 2;
+		size_t resultSize = strlen(baseRes) + strlen(subDir) + 2;
 		result = (char*) malloc(resultSize);
 		if (!result) {
       		fprintf(stderr,"malloc failed!\n");
@@ -72,7 +76,7 @@ sdlGetResourcePath(char* subDir = 0) {
 		strcat(baseRes, PATH_SEP);
 
 	} else {
-		int resultSize = strlen(baseRes) + 1;
+		size_t resultSize = strlen(baseRes) + 1;
 		result = (char*) malloc(resultSize);
 		if (!result) {
       		fprintf(stderr,"malloc failed!\n");
