@@ -63,7 +63,9 @@ sdlLoadTexture(char* resourcePath, char* filename, SDL_Renderer *ren) {
     return 0;
   }
 
+  SDL_LockSurface(bmp);
   SDL_Texture *tex = SDL_CreateTextureFromSurface(ren, bmp);
+  SDL_UnlockSurface(bmp);
   SDL_FreeSurface(bmp);
 
   return tex;
@@ -490,40 +492,42 @@ sdlHandleEvent(GameState* gameState, SDL_Event *event, PlayerInput *input) {
       gameState->running = false;
     } break;
 
-    case SDL_KEYDOWN: {
+    case SDL_KEYDOWN: 
+    case SDL_KEYUP: {
       SDL_Keycode keyCode = event->key.keysym.sym;
+      bool isDown = (event->key.state == SDL_PRESSED);
 
       if (event->key.repeat == 0) {
         switch (keyCode) {
           case SDLK_q: {
-            input->keyPressed[0][0] = true;
+            input->keyPressed[0][0] = isDown;
           } break;
           case SDLK_w: {
-            input->keyPressed[0][1] = true;
+            input->keyPressed[0][1] = isDown;
           } break;
           case SDLK_e: {
-            input->keyPressed[0][2] = true;
+            input->keyPressed[0][2] = isDown;
           } break;
           case SDLK_a: {
-            input->keyPressed[1][0] = true;
+            input->keyPressed[1][0] = isDown;
           } break;
           case SDLK_s: {
-            input->keyPressed[1][1] = true;
+            input->keyPressed[1][1] = isDown;
           } break;
           case SDLK_d: {
-            input->keyPressed[1][2] = true;
+            input->keyPressed[1][2] = isDown;
           } break;
           case SDLK_z: {
-            input->keyPressed[2][0] = true;
+            input->keyPressed[2][0] = isDown;
           } break;
           case SDLK_x: {
-            input->keyPressed[2][1] = true;
+            input->keyPressed[2][1] = isDown;
           } break;
           case SDLK_c: {
-            input->keyPressed[2][2] = true;
+            input->keyPressed[2][2] = isDown;
           } break;
           case SDLK_ESCAPE: {
-            gameState->running = false;
+            gameState->running = isDown;
           } break;
         }
       }        
@@ -569,7 +573,6 @@ sdlGameEnd(GameState* gameState, SDL_Window *win) {
     fprintf(stderr, "SDL_ShowMessageBox Error: %s\n", SDL_GetError());
     return 1;
   }
-  printf("buttonid = %d\n", buttonid);
   if (buttonid == 1) {
       *gameState = {};
       gameState->freeTilesCount = 9;  
@@ -587,8 +590,6 @@ main(int, char**) {
     fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
     return 1;
   }
-
-  SDL_LogSetAllPriority(SDL_LOG_PRIORITY_WARN);
 
   atexit(SDL_Quit);
 
@@ -666,7 +667,7 @@ main(int, char**) {
 
   while (gameState.running) {
     SDL_Event event;
-    while (SDL_PollEvent(&event)) {
+    while (SDL_PollEvent(&event) > 0) {
       sdlHandleEvent(&gameState, &event, &input);
     }
     if (gameState.running) {
